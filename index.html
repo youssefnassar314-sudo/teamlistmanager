@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Shift List</title>
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --success: #10B981;
+            --danger: #EF4444;
+            --bg: #F3F4F6;
+            --card-bg: #FFFFFF;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 500px;
+        }
+        h2 { text-align: center; margin-top: 0; }
+        .info-bar {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 1em;
+        }
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 6px;
+            background-color: var(--primary);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover { background-color: #4338CA; }
+        button:disabled { background-color: #9CA3AF; cursor: not-allowed; }
+        .btn-cancel { background-color: var(--danger); }
+        .btn-cancel:hover { background-color: #DC2626; }
+        
+        .list-container { margin-top: 20px; }
+        .list-section { margin-bottom: 20px; }
+        .list-title { font-weight: bold; margin-bottom: 10px; border-bottom: 2px solid var(--primary); display: inline-block;}
+        ul { list-style-type: none; padding: 0; margin: 0; }
+        li {
+            padding: 12px 10px;
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            margin-bottom: 5px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .main-slot { border-left: 4px solid var(--success); }
+        .waitlist-slot { border-left: 4px solid #F59E0B; opacity: 0.8; }
+        
+        .status-msg { text-align: center; color: var(--danger); font-weight: bold; margin-bottom: 15px; }
+        
+        /* Admin Section - Hidden by default */
+        #adminPanel {
+            display: none;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px dashed #ccc;
+        }
+        .admin-table { width: 100%; border-collapse: collapse; font-size: 0.8em; }
+        .admin-table th, .admin-table td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 ondblclick="toggleAdmin()">📅 Shift Roster</h2>
+    
+    <div class="info-bar">
+        <span id="slotsCount">Slots: 0 / 16</span>
+        <span id="cutoffStatus">Open until 10:00 PM</span>
+    </div>
+
+    <div id="statusMessage" class="status-msg"></div>
+
+    <div class="input-group" id="inputSection">
+        <input type="text" id="nameInput" placeholder="Enter your name..." autocomplete="off">
+        <button id="submitBtn" onclick="addName()">Join List</button>
+    </div>
+
+    <div class="list-container">
+        <div class="list-section" id="mainListSection">
+            <div class="list-title">Main List (1-16)</div>
+            <ul id="mainList"></ul>
+        </div>
+
+        <div class="list-section" id="waitlistSection" style="display: none;">
+            <div class="list-title" style="border-color: #F59E0B;">Waitlist</div>
+            <ul id="waitlist"></ul>
+        </div>
+    </div>
+
+    <!-- Admin Panel (Double click title to show) -->
+    <div id="adminPanel">
+        <h3>🔒 Admin Dashboard</h3>
+        <button class="btn-cancel" onclick="clearList()" style="margin-bottom:10px; width:100%;">Clear All Entries</button>
+        <button onclick="copyForGC()" style="margin-bottom:10px; width:100%; background-color:#10B981;">Copy List for GC</button>
+        
+        <h4>Recent Activity Logs</h4>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Action</th>
+                    <th>Name</th>
+                </tr>
+            </thead>
+            <tbody id="logTableBody"></tbody>
+        </table>
+    </div>
+
+</div>
+
+<!-- Firebase SDKs -->
+<script type="module">
+    // --- ILAGAY ANG IYONG FIREBASE CONFIG DITO ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+    import { getDatabase, ref, onValue, push, set, remove, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDmWM-TT9M41lt1O3YgPZYOi5W8JzUV-_g",
+      authDomain: "teamlistmanager-647d4.firebaseapp.com",
+      databaseURL: "https://teamlistmanager-647d4-default-rtdb.asia-southeast1.firebasedatabase.app", // IMPORTANTE ITO!
+      projectId: "teamlistmanager-647d4",
+      storageBucket: "teamlistmanager-647d4.firebasestorage.app",
+      messagingSenderId: "70023920416",
+      appId: "1:70023920416:web:cac334e7a7229bba7b7545"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const listRef = ref(db, 'attendance_list');
+    const logsRef = ref(db, 'system_logs');
+
+    // System Settings
+    const MAX_SLOTS = 16;
+    const CUTOFF_HOUR = 22; // 22:00 = 10:00 PM
+    
+    // Generate a simple device ID if not exists (for Self-Cancel tracking)
+    if(!localStorage.getItem('deviceId')) {
+        localStorage.setItem('deviceId', 'device_' + Math.random().toString(36).substr(2, 9));
+    }
+    const myDeviceId = localStorage.getItem('deviceId');
+
+    // DOM Elements
+    const nameInput = document.getElementById('nameInput');
+    const submitBtn = document.getElementById('submitBtn');
+    const statusMessage = document.getElementById('statusMessage');
+    const inputSection = document.getElementById('inputSection');
+    let currentData = [];
+
+    // --- FEATURE 3: Auto-Cutoff Check ---
+    function checkCutoff() {
+        const now = new Date();
+        if (now.getHours() >= CUTOFF_HOUR) {
+            statusMessage.innerText = "System Closed. Cut-off time (10:00 PM) reached.";
+            inputSection.style.display = 'none';
+            return true;
+        }
+        return false;
+    }
+
+    // --- MAIN REALTIME LISTENER ---
+    onValue(listRef, (snapshot) => {
+        const data = snapshot.val();
+        currentData = [];
+        
+        const mainListUI = document.getElementById('mainList');
+        const waitlistUI = document.getElementById('waitlist');
+        mainListUI.innerHTML = '';
+        waitlistUI.innerHTML = '';
+        
+        let myEntryId = null; // Para malaman if nakalista na tayo
+
+        if (data) {
+            // Convert to array and sort by timestamp
+            for (let id in data) {
+                currentData.push({ id, ...data[id] });
+            }
+            currentData.sort((a, b) => a.timestamp - b.timestamp);
+
+            let mainCount = 0;
+            let waitCount = 0;
+
+            currentData.forEach((entry, index) => {
+                // Check if device already listed (Anti-Spam feature)
+                if(entry.deviceId === myDeviceId) myEntryId = entry.id;
+
+                const li = document.createElement('li');
+                let slotNumber = index + 1;
+                
+                // --- FEATURE 2: Self-Cancel Button ---
+                let cancelBtnHTML = '';
+                if(entry.deviceId === myDeviceId) {
+                    cancelBtnHTML = `<button class="btn-cancel" style="padding: 4px 8px; font-size: 0.8em;" onclick="removeName('${entry.id}', '${entry.name}')">Cancel</button>`;
+                }
+
+                if (slotNumber <= MAX_SLOTS) {
+                    // MAIN LIST
+                    mainCount++;
+                    li.className = 'main-slot';
+                    li.innerHTML = `<span><b>${slotNumber}.</b> ${entry.name}</span> ${cancelBtnHTML}`;
+                    mainListUI.appendChild(li);
+                } else {
+                    // --- FEATURE 1: Waitlist ---
+                    waitCount++;
+                    li.className = 'waitlist-slot';
+                    li.innerHTML = `<span><b>Waitlist ${waitCount}.</b> ${entry.name}</span> ${cancelBtnHTML}`;
+                    waitlistUI.appendChild(li);
+                }
+            });
+
+            document.getElementById('slotsCount').innerText = `Slots: ${mainCount} / ${MAX_SLOTS}`;
+            document.getElementById('waitlistSection').style.display = waitCount > 0 ? 'block' : 'none';
+        } else {
+            document.getElementById('slotsCount').innerText = `Slots: 0 / ${MAX_SLOTS}`;
+            document.getElementById('waitlistSection').style.display = 'none';
+        }
+
+        // UI Logic check
+        if(checkCutoff()) return;
+
+        if(myEntryId) {
+            inputSection.style.display = 'none';
+            statusMessage.innerText = "You are already on the list! (Wait for admin instructions)";
+            statusMessage.style.color = "var(--success)";
+        } else {
+            inputSection.style.display = 'flex';
+            statusMessage.innerText = "";
+        }
+    });
+
+    // --- FEATURE 4: Admin Logs Listener ---
+    onValue(logsRef, (snapshot) => {
+        const data = snapshot.val();
+        const logTbody = document.getElementById('logTableBody');
+        logTbody.innerHTML = '';
+        if(data) {
+            let logsArray = Object.keys(data).map(k => data[k]).sort((a,b) => b.time - a.time).slice(0, 10); // Last 10 logs
+            logsArray.forEach(log => {
+                let dateStr = new Date(log.time).toLocaleTimeString();
+                let row = `<tr><td>${dateStr}</td><td>${log.action}</td><td>${log.name}</td></tr>`;
+                logTbody.innerHTML += row;
+            });
+        }
+    });
+
+    // --- ACTIONS ---
+    window.addName = function() {
+        if(checkCutoff()) return;
+        
+        let name = nameInput.value.trim();
+        if(!name) return alert("Please enter your name!");
+        
+        // Anti-alias simple check
+        let isDuplicate = currentData.some(e => e.name.toLowerCase() === name.toLowerCase());
+        if(isDuplicate) {
+            return alert("Pangalan mo ba 'yan? Parang may gumagamit na o nandito na sa listahan. Please check.");
+        }
+
+        const newEntryRef = push(listRef);
+        set(newEntryRef, {
+            name: name,
+            deviceId: myDeviceId,
+            timestamp: serverTimestamp()
+        });
+
+        // Log
+        push(logsRef, { action: "Added", name: name, time: serverTimestamp() });
+        nameInput.value = '';
+    }
+
+    window.removeName = function(id, name) {
+        if(confirm("Are you sure you want to cancel your slot?")) {
+            remove(ref(db, `attendance_list/${id}`));
+            push(logsRef, { action: "Self-Canceled", name: name, time: serverTimestamp() });
+        }
+    }
+
+    // --- ADMIN CONTROLS ---
+    window.toggleAdmin = function() {
+        // Simple double click on the Header to show admin (for demo purposes)
+        let panel = document.getElementById('adminPanel');
+        panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+    }
+
+    window.clearList = function() {
+        if(prompt("Type 'CONFIRM' to clear the list for a new day:") === "CONFIRM") {
+            remove(listRef);
+            push(logsRef, { action: "Admin Cleared List", name: "All", time: server", name: "All", time: serverTimestamp() });
+            alert("List Cleared!");
+        }
+    }
+
+    window.copyForGC = function() {
+        if(currentData.length === 0) return alert("Walang laman ang listahan.");
+        
+        let text = "📋 PAPASOK BUKAS:\n";
+        currentData.forEach((entry, idx) => {
+            if(idx < MAX_SLOTS) {
+                text += `${idx + 1}. ${entry.name}\n`;
+            }
+        });
+        
+        let waitlistCount = currentData.length - MAX_SLOTS;
+        if(waitlistCount > 0) {
+            text += `\n⏳ WAITLIST:\n`;
+            for(let i = MAX_SLOTS; i < currentData.length; i++) {
+                text += `W${i - MAX_SLOTS + 1}. ${currentData[i].name}\n`;
+            }
+        }
+        
+        navigator.clipboard.writeText(text).then(() => {
+            alert("Copied to clipboard! Ready to paste in Messenger.");
+        });
+    }
+
+</script>
+</body>
+</html>
