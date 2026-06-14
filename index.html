@@ -201,7 +201,7 @@
         /* Added: Mobile Responsiveness */
         @media (max-width: 480px) {
             .input-group { flex-direction: column; }
-            button { width: 100%; }
+            #submitBtn { width: 100%; } /* Pinalitan natin para yung 'Join List' lang ang humaba */
             li { flex-direction: column; align-items: flex-start; gap: 10px; }
             .btn-cancel { width: 100%; }
         }
@@ -215,7 +215,7 @@
         .chat-input-group { display: flex; gap: 8px; }
         .chat-input-group input { flex: 1; padding: 8px 12px; border-radius: 8px; border: 1px solid transparent; outline:none; background: rgba(255,255,255,0.9); font-family: 'Poppins', sans-serif;}
         .chat-input-group input:focus { border-color: var(--primary); }
-        .chat-input-group button { padding: 8px 15px; border-radius: 8px; background: var(--success); width: auto; box-shadow: none; }
+        .chat-input-group button { padding: 8px 15px; border-radius: 8px; background: var(--success); width: auto !important; box-shadow: none; flex-shrink: 0; }
         .chat-input-group button:hover { transform: none; background: #059669; }
 
         /* Admin Section */
