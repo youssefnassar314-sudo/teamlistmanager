@@ -8,6 +8,11 @@
         /* Import Google Font */
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 
+        /* Idinagdag: Para hindi sumobra sa screen ang padding */
+        * {
+            box-sizing: border-box;
+        }
+
         :root {
             --primary: #6366f1;
             --primary-hover: #4f46e5;
@@ -39,13 +44,14 @@
             background: var(--card-bg);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            padding: 35px 30px;
+            padding: 25px 20px; /* Binawasan ang padding */
             border-radius: 24px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.5);
             width: 100%;
             max-width: 450px;
-            margin-top: 5vh;
+            margin-top: 2vh;
+            overflow: hidden; /* Added: Para hindi lumampas ang laman sa phone */
         }
 
         h2 { 
@@ -192,6 +198,26 @@
         
         .status-msg:not(:empty) { display: block; }
 
+        /* Added: Mobile Responsiveness */
+        @media (max-width: 480px) {
+            .input-group { flex-direction: column; }
+            button { width: 100%; }
+            li { flex-direction: column; align-items: flex-start; gap: 10px; }
+            .btn-cancel { width: 100%; }
+        }
+
+        /* Added: Chatbox UI */
+        .chat-container { margin-top: 20px; border-top: 2px dashed rgba(0,0,0,0.1); padding-top: 15px; }
+        .chat-box { background: rgba(255,255,255,0.6); height: 160px; overflow-y: auto; border-radius: 12px; padding: 10px; margin-bottom: 10px; font-size: 0.85em; display: flex; flex-direction: column; gap: 8px;}
+        .chat-msg { background: white; padding: 8px 12px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.05); }
+        .chat-msg b { color: var(--primary); }
+        .chat-msg span { font-size: 0.7em; color: var(--text-muted); float: right; margin-top: 3px; }
+        .chat-input-group { display: flex; gap: 8px; }
+        .chat-input-group input { flex: 1; padding: 8px 12px; border-radius: 8px; border: 1px solid transparent; outline:none; background: rgba(255,255,255,0.9); font-family: 'Poppins', sans-serif;}
+        .chat-input-group input:focus { border-color: var(--primary); }
+        .chat-input-group button { padding: 8px 15px; border-radius: 8px; background: var(--success); width: auto; box-shadow: none; }
+        .chat-input-group button:hover { transform: none; background: #059669; }
+
         /* Admin Section */
         #adminPanel {
             display: none;
@@ -261,10 +287,20 @@
         </div>
     </div>
 
+    <!-- Added: Chatbox Section -->
+    <div class="chat-container">
+        <div class="list-title">💬 Agent Lounge</div>
+        <div class="chat-box" id="chatBox"></div>
+        <div class="chat-input-group">
+            <input type="text" id="chatInput" placeholder="Message... (Type name above first)">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
     <!-- Admin Panel (Double click title to show) -->
     <div id="adminPanel">
         <h3>🔒 Admin Dashboard</h3>
-        <button class="btn-cancel" onclick="clearList()" style="margin-bottom:10px; width:100%;">Clear All Entries</button>
+        <button class="btn-cancel" onclick="clearList()" style="margin-bottom:10px; width:100%;">Clear All Entries & Chat</button>
         <button onclick="copyForGC()" style="margin-bottom:10px; width:100%; background-color:#10B981;">Copy List for GC</button>
         
         <h4>Recent Activity Logs</h4>
@@ -284,14 +320,13 @@
 
 <!-- Firebase SDKs -->
 <script type="module">
-    // --- ILAGAY ANG IYONG FIREBASE CONFIG DITO ---
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
     import { getDatabase, ref, onValue, push, set, remove, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDmWM-TT9M41lt1O3YgPZYOi5W8JzUV-_g",
       authDomain: "teamlistmanager-647d4.firebaseapp.com",
-      databaseURL: "https://teamlistmanager-647d4-default-rtdb.asia-southeast1.firebasedatabase.app", // IMPORTANTE ITO!
+      databaseURL: "https://teamlistmanager-647d4-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "teamlistmanager-647d4",
       storageBucket: "teamlistmanager-647d4.firebasestorage.app",
       messagingSenderId: "70023920416",
@@ -303,6 +338,7 @@
     const db = getDatabase(app);
     const listRef = ref(db, 'attendance_list');
     const logsRef = ref(db, 'system_logs');
+    const chatRef = ref(db, 'chat_messages'); // Added para sa chat
 
     // System Settings
     const MAX_SLOTS = 16;
@@ -361,6 +397,9 @@
                 const li = document.createElement('li');
                 let slotNumber = index + 1;
                 
+                // Added: Kunin ang exact time (may fallback kung kaka-submit lang)
+                let timeString = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Just now';
+                
                 // --- FEATURE 2: Self-Cancel Button ---
                 let cancelBtnHTML = '';
                 if(entry.deviceId === myDeviceId) {
@@ -368,16 +407,16 @@
                 }
 
                 if (slotNumber <= MAX_SLOTS) {
-                    // MAIN LIST
+                    // MAIN LIST (Dinagdag ang timeString)
                     mainCount++;
                     li.className = 'main-slot';
-                    li.innerHTML = `<span><b>${slotNumber}.</b> ${entry.name}</span> ${cancelBtnHTML}`;
+                    li.innerHTML = `<span style="flex:1;"><b>${slotNumber}.</b> ${entry.name} <span style="font-size: 0.8em; color: var(--text-muted);">(${timeString})</span></span> ${cancelBtnHTML}`;
                     mainListUI.appendChild(li);
                 } else {
-                    // --- FEATURE 1: Waitlist ---
+                    // --- FEATURE 1: Waitlist (Dinagdag ang timeString)
                     waitCount++;
                     li.className = 'waitlist-slot';
-                    li.innerHTML = `<span><b>Waitlist ${waitCount}.</b> ${entry.name}</span> ${cancelBtnHTML}`;
+                    li.innerHTML = `<span style="flex:1;"><b>W${waitCount}.</b> ${entry.name} <span style="font-size: 0.8em; color: var(--text-muted);">(${timeString})</span></span> ${cancelBtnHTML}`;
                     waitlistUI.appendChild(li);
                 }
             });
@@ -410,7 +449,7 @@
         if(data) {
             let logsArray = Object.keys(data).map(k => data[k]).sort((a,b) => b.time - a.time).slice(0, 10); // Last 10 logs
             logsArray.forEach(log => {
-                let dateStr = new Date(log.time).toLocaleTimeString();
+                let dateStr = log.time ? new Date(log.time).toLocaleTimeString() : '';
                 let row = `<tr><td>${dateStr}</td><td>${log.action}</td><td>${log.name}</td></tr>`;
                 logTbody.innerHTML += row;
             });
@@ -439,7 +478,7 @@
 
         // Log
         push(logsRef, { action: "Added", name: name, time: serverTimestamp() });
-        nameInput.value = '';
+        // nameInput.value = ''; // Hindi natin ika-clear para magamit niya pang-chat
     }
 
     window.removeName = function(id, name) {
@@ -451,7 +490,6 @@
 
     // --- ADMIN CONTROLS ---
     window.toggleAdmin = function() {
-        // Simple double click on the Header to show admin (for demo purposes)
         let panel = document.getElementById('adminPanel');
         panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
     }
@@ -459,8 +497,9 @@
     window.clearList = function() {
         if(prompt("Type 'CONFIRM' to clear the list for a new day:") === "CONFIRM") {
             remove(listRef);
+            remove(chatRef); // Added: Burado rin pati chat usapan
             push(logsRef, { action: "Admin Cleared List", name: "All", time: serverTimestamp() });
-            alert("List Cleared!");
+            alert("List and Chat Cleared!");
         }
     }
 
@@ -487,6 +526,43 @@
         });
     }
 
+    // --- CHAT SYSTEM ---
+    onValue(chatRef, (snapshot) => {
+        const data = snapshot.val();
+        const chatBox = document.getElementById('chatBox');
+        chatBox.innerHTML = '';
+        if(data) {
+            let chats = [];
+            for (let id in data) chats.push(data[id]);
+            chats.sort((a,b) => a.timestamp - b.timestamp); // Sort by time
+            
+            chats.forEach(chat => {
+                let time = chat.timestamp ? new Date(chat.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Just now';
+                chatBox.innerHTML += `<div class="chat-msg"><b>${chat.sender}:</b> ${chat.message} <span>${time}</span></div>`;
+            });
+            // Auto-scroll sa pinakababa kapag may bagong message
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    });
+
+    window.sendMessage = function() {
+        let msgInput = document.getElementById('chatInput');
+        let nameInputVal = document.getElementById('nameInput').value.trim();
+        let msg = msgInput.value.trim();
+        
+        // Kung walang name sa text box sa taas, 'Agent' ang lalabas
+        let senderName = nameInputVal ? nameInputVal : "Agent";
+        
+        if(!msg) return; // Wag magsend kung blangko
+
+        push(chatRef, {
+            sender: senderName,
+            message: msg,
+            timestamp: serverTimestamp()
+        });
+        
+        msgInput.value = ''; // Clear text box after send
+    }
 </script>
 </body>
 </html>
