@@ -322,7 +322,7 @@
     window.clearList = function() {
         if(prompt("Type 'CONFIRM' to clear the list for a new day:") === "CONFIRM") {
             remove(listRef);
-            push(logsRef, { action: "Admin Cleared List", name: "All", time: server", name: "All", time: serverTimestamp() });
+            push(logsRef, { action: "Admin Cleared List", name: "All", time: serverTimestamp() });
             alert("List Cleared!");
         }
     }
