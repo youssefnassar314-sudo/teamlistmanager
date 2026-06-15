@@ -51,7 +51,10 @@
     </div>
 
     <div class="dashboard-card">
-        <h4 style="margin-top:0; color:#9ca3af;">Live Roster Preview (<span id="adminSlotCount">0</span>)</h4>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h4 style="margin:0; color:#9ca3af;">Live Roster Preview (<span id="adminSlotCount">0</span>)</h4>
+            <button onclick="clearRosterOnly()" style="background: #ef4444; padding: 6px 12px; font-size: 0.8em; width: auto; box-shadow: none; border-radius: 6px;">🧹 Clear Roster</button>
+        </div>
         <ul id="adminListPreview" style="list-style: none; padding: 0; margin: 0; font-size: 0.9em; max-height: 250px; overflow-y: auto; background: #1f2937; border-radius: 8px; padding: 10px; border: 1px solid #4b5563;">
             <li style="color: #9ca3af; text-align: center;">Loading...</li>
         </ul>
@@ -224,6 +227,13 @@
         push(listRef, { name: name, deviceId: "admin_added_" + Date.now(), timestamp: serverTimestamp() });
         push(logsRef, { action: "Force Added AE", name: name, time: serverTimestamp() });
         document.getElementById('adminAddInput').value = '';
+    }
+
+    window.clearRosterOnly = function() {
+        if(confirm("Are you sure you want to clear the Shift Roster ONLY? (Ang usapan sa chat ay HINDI mabubura)")) {
+            remove(listRef);
+            push(logsRef, { action: "Admin Cleared Roster", name: "All", time: serverTimestamp() });
+        }
     }
 
     window.clearChat = function() {
