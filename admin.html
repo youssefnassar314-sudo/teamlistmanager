@@ -48,6 +48,13 @@
     </div>
 
     <div class="dashboard-card">
+        <h4 style="margin-top:0; color:#9ca3af;">Live Roster Preview (<span id="adminSlotCount">0</span>)</h4>
+        <ul id="adminListPreview" style="list-style: none; padding: 0; margin: 0; font-size: 0.9em; max-height: 250px; overflow-y: auto; background: #1f2937; border-radius: 8px; padding: 10px; border: 1px solid #4b5563;">
+            <li style="color: #9ca3af; text-align: center;">Loading...</li>
+        </ul>
+    </div>
+
+    <div class="dashboard-card">
         <h4 style="margin-top:0; color:#ef4444;">Danger Zone</h4>
         <button class="btn-warning" onclick="clearChat()">🗑️ Clear Agent Chats Only</button>
         <button class="btn-danger" onclick="clearList()">🚨 CLEAR ALL DATABASE (Roster + Chat)</button>
@@ -109,9 +116,40 @@
         toggleBtn.innerText = isListOpen ? "🔴 CLOSE LIST NOW" : "🟢 OPEN LIST NOW";
         toggleBtn.style.background = isListOpen ? "#ef4444" : "#10b981";
         document.getElementById('slotInput').value = currentMaxSlots;
+        
+        // I-re-render ang preview kapag nagbago ang max slots
+        if (typeof renderAdminPreview === "function") {
+            renderAdminPreview();
+        }
     });
 
-    // --- PULL CURRENT LIST FOR GC EXPORT ---
+    // --- PULL CURRENT LIST FOR GC EXPORT & LIVE PREVIEW ---
+    function renderAdminPreview() {
+        const previewUI = document.getElementById('adminListPreview');
+        previewUI.innerHTML = '';
+        let mainCount = 0;
+
+        if (currentData.length > 0) {
+            currentData.forEach((entry, index) => {
+                let slot = index + 1;
+                let isWaitlist = slot > currentMaxSlots;
+                if (!isWaitlist) mainCount++;
+                
+                let timeString = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Just now';
+                let prefix = isWaitlist ? `W${slot - currentMaxSlots}` : slot;
+                let color = isWaitlist ? '#f59e0b' : '#10b981'; // Orange kung waitlist, Green kung main
+                
+                previewUI.innerHTML += `<li style="padding: 6px 0; border-bottom: 1px solid #374151; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: #f3f4f6;"><b style="color:${color}; width: 30px; display:inline-block;">${prefix}.</b> ${entry.name}</span>
+                    <span style="color: #9ca3af; font-size: 0.8em;">${timeString}</span>
+                </li>`;
+            });
+        } else {
+            previewUI.innerHTML = `<li style="color: #9ca3af; text-align: center;">Walang nakalista.</li>`;
+        }
+        document.getElementById('adminSlotCount').innerText = `${mainCount} / ${currentMaxSlots}`;
+    }
+
     onValue(listRef, (snapshot) => {
         const data = snapshot.val();
         currentData = [];
@@ -119,6 +157,7 @@
             for (let id in data) currentData.push({ id, ...data[id] });
             currentData.sort((a, b) => a.timestamp - b.timestamp);
         }
+        renderAdminPreview();
     });
 
     // --- PULL LOGS ---
