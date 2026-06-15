@@ -26,7 +26,10 @@
 <body>
 
 <div class="container" id="mainWrapper">
-    <h2>🛡️ Command Center</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <h2 style="margin: 0;">🛡️ Command Center</h2>
+        <button onclick="adminLogout()" style="background: #ef4444; padding: 6px 12px; font-size: 0.8em; width: auto; box-shadow: none;">Lock / Logout</button>
+    </div>
     
     <div class="dashboard-card">
         <h4 style="margin-top:0; color:#9ca3af;">System Toggles</h4>
@@ -72,12 +75,27 @@
 <script type="module">
     // --- SECURITY CHECK (PIN) ---
     const ADMIN_PIN = "2026";
-    let enteredPin = prompt("Restricted Area: Enter Admin PIN");
-    if(enteredPin === ADMIN_PIN) {
+    let savedPin = localStorage.getItem('adminSavedPin');
+
+    if (savedPin === ADMIN_PIN) {
+        // Kapag may saved PIN na tama, diretso pasok
         document.getElementById('mainWrapper').style.display = 'block';
     } else {
-        document.body.innerHTML = "<h2 style='text-align:center; width:100%; color:#ef4444; margin-top: 50px;'>Access Denied.</h2>";
-        throw new Error("Wrong PIN"); // Papatigilin ang JS
+        // Kapag wala o mali, manghihingi
+        let enteredPin = prompt("Restricted Area: Enter Admin PIN");
+        if(enteredPin === ADMIN_PIN) {
+            localStorage.setItem('adminSavedPin', enteredPin); // I-save sa browser
+            document.getElementById('mainWrapper').style.display = 'block';
+        } else {
+            document.body.innerHTML = "<h2 style='text-align:center; width:100%; color:#ef4444; margin-top: 50px;'>Access Denied.</h2>";
+            throw new Error("Wrong PIN"); // Papatigilin ang JS
+        }
+    }
+
+    // --- LOGOUT FUNCTION ---
+    window.adminLogout = function() {
+        localStorage.removeItem('adminSavedPin');
+        location.reload(); // I-refresh ang page para ma-lock agad
     }
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
