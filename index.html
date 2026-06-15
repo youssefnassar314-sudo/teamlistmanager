@@ -325,8 +325,25 @@
     <!-- Admin Panel (Double click title to show) -->
     <div id="adminPanel">
         <h3>🔒 Admin Dashboard</h3>
-        <button class="btn-cancel" onclick="clearList()" style="margin-bottom:10px; width:100%;">Clear All Entries & Chat</button>
-        <button onclick="copyForGC()" style="margin-bottom:10px; width:100%; background-color:#10B981;">Copy List for GC</button>
+        
+        <!-- NEW SETTINGS -->
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <button id="toggleListBtn" onclick="toggleListStatus()" style="flex: 1; background-color: var(--warning);">Pa-Load Settings...</button>
+        </div>
+        
+        <div class="input-group" style="margin-bottom: 15px;">
+            <input type="number" id="slotInput" placeholder="Max Slots" style="width: 80px; text-align: center;">
+            <button onclick="updateMaxSlots()">Set Slots</button>
+        </div>
+        
+        <div class="input-group" style="margin-bottom: 15px;">
+            <input type="text" id="adminAddInput" placeholder="Manually Add AE...">
+            <button onclick="adminAddName()">Add AE</button>
+        </div>
+
+        <button class="btn-cancel" onclick="clearList()" style="margin-bottom:10px; width:100%;">🚨 Clear All Database (Requires PIN)</button>
+        <button class="btn-cancel" onclick="clearChat()" style="margin-bottom:10px; width:100%; background-color: #f97316;">🗑️ Clear Chats Only</button>
+        <button onclick="copyForGC()" style="margin-bottom:10px; width:100%; background-color:#10B981;">📋 Copy List for GC</button>
         
         <h4>Recent Activity Logs</h4>
         <table class="admin-table">
@@ -364,10 +381,12 @@
     const listRef = ref(db, 'attendance_list');
     const logsRef = ref(db, 'system_logs');
     const chatRef = ref(db, 'chat_messages'); // Added para sa chat
+    const settingsRef = ref(db, 'settings'); // NEW: Para sa Slots at ON/OFF List
 
-    // System Settings
-    const MAX_SLOTS = 16;
-    const CUTOFF_HOUR = 22; // 22:00 = 10:00 PM
+    // System Settings Variables
+    let currentMaxSlots = 16; // Default
+    let isListOpen = false; // Default list status
+    const ADMIN_PIN = "2026"; // PIN para sa Admin
     
     // Generate a simple device ID if not exists (for Self-Cancel tracking)
     if(!localStorage.getItem('deviceId')) {
@@ -382,15 +401,42 @@
     const inputSection = document.getElementById('inputSection');
     let currentData = [];
 
-    // --- FEATURE 3: Auto-Cutoff Check ---
-    function checkCutoff() {
-        const now = new Date();
-        if (now.getHours() >= CUTOFF_HOUR) {
-            statusMessage.innerText = "System Closed. Cut-off time (10:00 PM) reached.";
-            inputSection.style.display = 'none';
-            return true;
+    // --- SETTINGS REALTIME LISTENER (ON/OFF & SLOTS) ---
+    onValue(settingsRef, (snapshot) => {
+        const data = snapshot.val();
+        if(data) {
+            currentMaxSlots = data.maxSlots || 16;
+            isListOpen = data.isListOpen !== undefined ? data.isListOpen : false;
         }
-        return false;
+
+        // Update UI Text
+        let statusDisplay = document.getElementById('cutoffStatus');
+        statusDisplay.innerText = isListOpen ? "🟢 LIST IS OPEN" : "🔴 LIST IS CLOSED";
+        statusDisplay.style.color = isListOpen ? "var(--success)" : "var(--danger)";
+        statusDisplay.style.fontWeight = "bold";
+
+        // Update Admin Toggle Button
+        let toggleBtn = document.getElementById('toggleListBtn');
+        if(toggleBtn) {
+            toggleBtn.innerText = isListOpen ? "Close List Now" : "Open List Now";
+            toggleBtn.style.backgroundColor = isListOpen ? "var(--danger)" : "var(--success)";
+        }
+        
+        let slotInput = document.getElementById('slotInput');
+        if(slotInput && !slotInput.value) slotInput.value = currentMaxSlots;
+
+        // Force UI Refresh para ma-hide/show yung input box base sa status
+        refreshInputUI();
+    });
+
+    function refreshInputUI() {
+        if (!isListOpen) {
+            statusMessage.innerText = "System Closed. Ang listahan ay naka-lock pa.";
+            inputSection.style.display = 'none';
+        } else {
+            statusMessage.innerText = "";
+            inputSection.style.display = 'flex';
+        }
     }
 
     // --- MAIN REALTIME LISTENER ---
@@ -403,10 +449,9 @@
         mainListUI.innerHTML = '';
         waitlistUI.innerHTML = '';
         
-        let myEntryId = null; // Para malaman if nakalista na tayo
+        let myEntryId = null;
 
         if (data) {
-            // Convert to array and sort by timestamp
             for (let id in data) {
                 currentData.push({ id, ...data[id] });
             }
@@ -416,29 +461,23 @@
             let waitCount = 0;
 
             currentData.forEach((entry, index) => {
-                // Check if device already listed (Anti-Spam feature)
                 if(entry.deviceId === myDeviceId) myEntryId = entry.id;
 
                 const li = document.createElement('li');
                 let slotNumber = index + 1;
-                
-                // Added: Kunin ang exact time (may fallback kung kaka-submit lang)
                 let timeString = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Just now';
                 
-                // --- FEATURE 2: Self-Cancel Button ---
                 let cancelBtnHTML = '';
                 if(entry.deviceId === myDeviceId) {
                     cancelBtnHTML = `<button class="btn-cancel" style="padding: 4px 8px; font-size: 0.8em;" onclick="removeName('${entry.id}', '${entry.name}')">Cancel</button>`;
                 }
 
-                if (slotNumber <= MAX_SLOTS) {
-                    // MAIN LIST (Dinagdag ang timeString)
+                if (slotNumber <= currentMaxSlots) { // Ginamit ang Set Number
                     mainCount++;
                     li.className = 'main-slot';
                     li.innerHTML = `<span style="flex:1;"><b>${slotNumber}.</b> ${entry.name} <span style="font-size: 0.8em; color: var(--text-muted);">(${timeString})</span></span> ${cancelBtnHTML}`;
                     mainListUI.appendChild(li);
                 } else {
-                    // --- FEATURE 1: Waitlist (Dinagdag ang timeString)
                     waitCount++;
                     li.className = 'waitlist-slot';
                     li.innerHTML = `<span style="flex:1;"><b>W${waitCount}.</b> ${entry.name} <span style="font-size: 0.8em; color: var(--text-muted);">(${timeString})</span></span> ${cancelBtnHTML}`;
@@ -446,17 +485,17 @@
                 }
             });
 
-            document.getElementById('slotsCount').innerText = `Slots: ${mainCount} / ${MAX_SLOTS}`;
+            document.getElementById('slotsCount').innerText = `Slots: ${mainCount} / ${currentMaxSlots}`;
             document.getElementById('waitlistSection').style.display = waitCount > 0 ? 'block' : 'none';
         } else {
-            document.getElementById('slotsCount').innerText = `Slots: 0 / ${MAX_SLOTS}`;
+            document.getElementById('slotsCount').innerText = `Slots: 0 / ${currentMaxSlots}`;
             document.getElementById('waitlistSection').style.display = 'none';
         }
 
         // UI Logic check
-        if(checkCutoff()) return;
+        refreshInputUI();
 
-        if(myEntryId) {
+        if(myEntryId && isListOpen) {
             inputSection.style.display = 'none';
             statusMessage.innerText = "You are already on the list! (Wait for admin instructions)";
             statusMessage.style.color = "var(--success)";
@@ -483,7 +522,7 @@
 
     // --- ACTIONS ---
     window.addName = function() {
-        if(checkCutoff()) return;
+        if(!isListOpen) return alert("Naka-close po ang listahan ngayon.");
         
         let name = nameInput.value.trim();
         if(!name) return alert("Please enter your name!");
@@ -516,15 +555,70 @@
     // --- ADMIN CONTROLS ---
     window.toggleAdmin = function() {
         let panel = document.getElementById('adminPanel');
-        panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+        if (panel.style.display === 'block') {
+            panel.style.display = 'none';
+        } else {
+            let pin = prompt("Enter Admin PIN:");
+            if(pin === ADMIN_PIN) {
+                panel.style.display = 'block';
+            } else if (pin !== null) {
+                alert("Maling PIN!");
+            }
+        }
+    }
+
+    window.toggleListStatus = function() {
+        set(settingsRef, {
+            isListOpen: !isListOpen,
+            maxSlots: currentMaxSlots
+        });
+        push(logsRef, { action: !isListOpen ? "Opened List" : "Closed List", name: "Admin", time: serverTimestamp() });
+    }
+
+    window.updateMaxSlots = function() {
+        let newVal = parseInt(document.getElementById('slotInput').value);
+        if(newVal > 0) {
+            set(settingsRef, {
+                isListOpen: isListOpen,
+                maxSlots: newVal
+            });
+            push(logsRef, { action: "Updated Slots to " + newVal, name: "Admin", time: serverTimestamp() });
+            alert("Slots updated to " + newVal);
+        }
+    }
+
+    window.adminAddName = function() {
+        let name = document.getElementById('adminAddInput').value.trim();
+        if(!name) return alert("Enter AE name first!");
+        
+        const newEntryRef = push(listRef);
+        set(newEntryRef, {
+            name: name,
+            deviceId: "admin_added_" + Math.random(),
+            timestamp: serverTimestamp()
+        });
+        push(logsRef, { action: "Admin Added AE", name: name, time: serverTimestamp() });
+        document.getElementById('adminAddInput').value = '';
     }
 
     window.clearList = function() {
-        if(prompt("Type 'CONFIRM' to clear the list for a new day:") === "CONFIRM") {
-            remove(listRef);
-            remove(chatRef); // Added: Burado rin pati chat usapan
-            push(logsRef, { action: "Admin Cleared List", name: "All", time: serverTimestamp() });
-            alert("List and Chat Cleared!");
+        if(prompt("🚨 ADMIN COMMAND: Enter PIN to Clear Database:") === ADMIN_PIN) {
+            if(confirm("Are you 100% sure you want to delete all entries AND chats?")) {
+                remove(listRef);
+                remove(chatRef);
+                push(logsRef, { action: "Admin Cleared Database", name: "All", time: serverTimestamp() });
+                alert("Database Cleared!");
+            }
+        } else {
+            alert("Maling PIN o na-cancel!");
+        }
+    }
+
+    window.clearChat = function() {
+        if(confirm("Are you sure you want to clear the Agent Lounge chats only?")) {
+            remove(chatRef);
+            push(logsRef, { action: "Admin Cleared Chats", name: "All", time: serverTimestamp() });
+            alert("Chats Cleared!");
         }
     }
 
@@ -533,16 +627,16 @@
         
         let text = "📋 PAPASOK BUKAS:\n";
         currentData.forEach((entry, idx) => {
-            if(idx < MAX_SLOTS) {
+            if(idx < currentMaxSlots) {
                 text += `${idx + 1}. ${entry.name}\n`;
             }
         });
         
-        let waitlistCount = currentData.length - MAX_SLOTS;
+        let waitlistCount = currentData.length - currentMaxSlots;
         if(waitlistCount > 0) {
             text += `\n⏳ WAITLIST:\n`;
-            for(let i = MAX_SLOTS; i < currentData.length; i++) {
-                text += `W${i - MAX_SLOTS + 1}. ${currentData[i].name}\n`;
+            for(let i = currentMaxSlots; i < currentData.length; i++) {
+                text += `W${i - currentMaxSlots + 1}. ${currentData[i].name}\n`;
             }
         }
         
