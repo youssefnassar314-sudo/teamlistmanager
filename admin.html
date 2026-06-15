@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Team Manager</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+        * { box-sizing: border-box; }
+        body { font-family: 'Poppins', sans-serif; background: #1f2937; color: #f3f4f6; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; }
+        .container { background: #374151; padding: 30px; border-radius: 16px; width: 100%; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: none; } /* Naka-hide by default */
+        h2 { text-align: center; color: #10b981; margin-top: 0; }
+        .dashboard-card { background: #1f2937; padding: 15px; border-radius: 12px; margin-bottom: 20px; }
+        .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
+        input { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #4b5563; background: #374151; color: white; font-family: 'Poppins'; }
+        button { padding: 10px 15px; border: none; border-radius: 8px; background: #6366f1; color: white; font-weight: bold; cursor: pointer; }
+        button:hover { filter: brightness(1.1); }
+        .btn-danger { background: #ef4444; width: 100%; margin-bottom: 10px; }
+        .btn-warning { background: #f59e0b; width: 100%; margin-bottom: 10px; }
+        .btn-success { background: #10b981; width: 100%; margin-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85em; margin-top: 10px; }
+        th, td { border-bottom: 1px solid #4b5563; padding: 8px; text-align: left; }
+        th { color: #9ca3af; }
+    </style>
+</head>
+<body>
+
+<div class="container" id="mainWrapper">
+    <h2>🛡️ Command Center</h2>
+    
+    <div class="dashboard-card">
+        <h4 style="margin-top:0; color:#9ca3af;">System Toggles</h4>
+        <button id="toggleListBtn" onclick="toggleListStatus()" style="width: 100%; margin-bottom: 10px; padding: 15px;">Loading...</button>
+        
+        <div class="input-group">
+            <input type="number" id="slotInput" placeholder="Max Slots" style="max-width: 100px; text-align: center;">
+            <button onclick="updateMaxSlots()">Update Slots</button>
+        </div>
+    </div>
+
+    <div class="dashboard-card">
+        <h4 style="margin-top:0; color:#9ca3af;">AE Manager</h4>
+        <div class="input-group">
+            <input type="text" id="adminAddInput" placeholder="Force Add AE Name...">
+            <button onclick="adminAddName()">Insert AE</button>
+        </div>
+        <button class="btn-success" onclick="copyForGC()">📋 Copy Final List for GC</button>
+    </div>
+
+    <div class="dashboard-card">
+        <h4 style="margin-top:0; color:#ef4444;">Danger Zone</h4>
+        <button class="btn-warning" onclick="clearChat()">🗑️ Clear Agent Chats Only</button>
+        <button class="btn-danger" onclick="clearList()">🚨 CLEAR ALL DATABASE (Roster + Chat)</button>
+    </div>
+
+    <div class="dashboard-card">
+        <h4 style="margin-top:0; color:#9ca3af;">Activity Logs</h4>
+        <table>
+            <thead><tr><th>Time</th><th>Action</th><th>Name</th></tr></thead>
+            <tbody id="logTableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script type="module">
+    // --- SECURITY CHECK (PIN) ---
+    const ADMIN_PIN = "2026";
+    let enteredPin = prompt("Restricted Area: Enter Admin PIN");
+    if(enteredPin === ADMIN_PIN) {
+        document.getElementById('mainWrapper').style.display = 'block';
+    } else {
+        document.body.innerHTML = "<h2 style='text-align:center; width:100%; color:#ef4444; margin-top: 50px;'>Access Denied.</h2>";
+        throw new Error("Wrong PIN"); // Papatigilin ang JS
+    }
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+    import { getDatabase, ref, onValue, push, set, remove, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDmWM-TT9M41lt1O3YgPZYOi5W8JzUV-_g",
+      authDomain: "teamlistmanager-647d4.firebaseapp.com",
+      databaseURL: "https://teamlistmanager-647d4-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "teamlistmanager-647d4",
+      storageBucket: "teamlistmanager-647d4.firebasestorage.app",
+      messagingSenderId: "70023920416",
+      appId: "1:70023920416:web:cac334e7a7229bba7b7545"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const listRef = ref(db, 'attendance_list');
+    const logsRef = ref(db, 'system_logs');
+    const chatRef = ref(db, 'chat_messages');
+    const settingsRef = ref(db, 'settings');
+
+    let currentMaxSlots = 16;
+    let isListOpen = false;
+    let currentData = [];
+
+    // --- PULL SETTINGS ---
+    onValue(settingsRef, (snapshot) => {
+        const data = snapshot.val();
+        if(data) {
+            currentMaxSlots = data.maxSlots || 16;
+            isListOpen = data.isListOpen !== undefined ? data.isListOpen : false;
+        }
+
+        let toggleBtn = document.getElementById('toggleListBtn');
+        toggleBtn.innerText = isListOpen ? "🔴 CLOSE LIST NOW" : "🟢 OPEN LIST NOW";
+        toggleBtn.style.background = isListOpen ? "#ef4444" : "#10b981";
+        document.getElementById('slotInput').value = currentMaxSlots;
+    });
+
+    // --- PULL CURRENT LIST FOR GC EXPORT ---
+    onValue(listRef, (snapshot) => {
+        const data = snapshot.val();
+        currentData = [];
+        if (data) {
+            for (let id in data) currentData.push({ id, ...data[id] });
+            currentData.sort((a, b) => a.timestamp - b.timestamp);
+        }
+    });
+
+    // --- PULL LOGS ---
+    onValue(logsRef, (snapshot) => {
+        const data = snapshot.val();
+        const logTbody = document.getElementById('logTableBody');
+        logTbody.innerHTML = '';
+        if(data) {
+            let logsArray = Object.keys(data).map(k => data[k]).sort((a,b) => b.time - a.time).slice(0, 15);
+            logsArray.forEach(log => {
+                let dateStr = log.time ? new Date(log.time).toLocaleTimeString() : '';
+                logTbody.innerHTML += `<tr><td>${dateStr}</td><td>${log.action}</td><td>${log.name}</td></tr>`;
+            });
+        }
+    });
+
+    // --- ADMIN COMMANDS ---
+    window.toggleListStatus = function() {
+        set(settingsRef, { isListOpen: !isListOpen, maxSlots: currentMaxSlots });
+        push(logsRef, { action: !isListOpen ? "Opened List" : "Closed List", name: "Admin", time: serverTimestamp() });
+    }
+
+    window.updateMaxSlots = function() {
+        let newVal = parseInt(document.getElementById('slotInput').value);
+        if(newVal > 0) {
+            set(settingsRef, { isListOpen: isListOpen, maxSlots: newVal });
+            push(logsRef, { action: "Updated Slots to " + newVal, name: "Admin", time: serverTimestamp() });
+            alert("Slots updated to " + newVal);
+        }
+    }
+
+    window.adminAddName = function() {
+        let name = document.getElementById('adminAddInput').value.trim();
+        if(!name) return alert("Enter AE name!");
+        push(listRef, { name: name, deviceId: "admin_added_" + Date.now(), timestamp: serverTimestamp() });
+        push(logsRef, { action: "Force Added AE", name: name, time: serverTimestamp() });
+        document.getElementById('adminAddInput').value = '';
+    }
+
+    window.clearChat = function() {
+        if(confirm("Are you sure you want to delete all Agent Lounge chats?")) {
+            remove(chatRef);
+            push(logsRef, { action: "Admin Cleared Chats", name: "All", time: serverTimestamp() });
+        }
+    }
+
+    window.clearList = function() {
+        let confirmPin = prompt("DANGER ZONE: Enter PIN again to clear Database");
+        if(confirmPin === ADMIN_PIN && confirm("Wipe all roster names and chats? This cannot be undone.")) {
+            remove(listRef);
+            remove(chatRef);
+            push(logsRef, { action: "Nuked Database", name: "All", time: serverTimestamp() });
+            alert("System Cleaned!");
+        } else {
+            alert("Action Cancelled or Wrong PIN.");
+        }
+    }
+
+    window.copyForGC = function() {
+        if(currentData.length === 0) return alert("Walang laman ang listahan.");
+        let text = "📋 PAPASOK BUKAS:\n";
+        currentData.forEach((entry, idx) => {
+            if(idx < currentMaxSlots) text += `${idx + 1}. ${entry.name}\n`;
+        });
+        let waitlistCount = currentData.length - currentMaxSlots;
+        if(waitlistCount > 0) {
+            text += `\n⏳ WAITLIST:\n`;
+            for(let i = currentMaxSlots; i < currentData.length; i++) {
+                text += `W${i - currentMaxSlots + 1}. ${currentData[i].name}\n`;
+            }
+        }
+        navigator.clipboard.writeText(text).then(() => alert("Copied! Ready to paste."));
+    }
+</script>
+</body>
+</html>
