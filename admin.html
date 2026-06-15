@@ -137,11 +137,14 @@
                 
                 let timeString = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Just now';
                 let prefix = isWaitlist ? `W${slot - currentMaxSlots}` : slot;
-                let color = isWaitlist ? '#f59e0b' : '#10b981'; // Orange kung waitlist, Green kung main
+                let color = isWaitlist ? '#f59e0b' : '#10b981'; 
                 
                 previewUI.innerHTML += `<li style="padding: 6px 0; border-bottom: 1px solid #374151; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="color: #f3f4f6;"><b style="color:${color}; width: 30px; display:inline-block;">${prefix}.</b> ${entry.name}</span>
-                    <span style="color: #9ca3af; font-size: 0.8em;">${timeString}</span>
+                    <div style="flex: 1; display: flex; align-items: center; gap: 10px;">
+                        <span style="color: #f3f4f6;"><b style="color:${color}; width: 30px; display:inline-block;">${prefix}.</b> ${entry.name}</span>
+                        <span style="color: #9ca3af; font-size: 0.7em;">${timeString}</span>
+                    </div>
+                    <button onclick="adminDeleteEntry('${entry.id}', '${entry.name}')" style="background: #ef4444; padding: 4px 8px; font-size: 0.8em; width: auto; border-radius: 6px;">✕</button>
                 </li>`;
             });
         } else {
@@ -159,6 +162,14 @@
         }
         renderAdminPreview();
     });
+
+    // --- BAGONG DELETE FUNCTION ---
+    window.adminDeleteEntry = function(id, name) {
+        if(confirm(`Sigurado ka bang gusto mong burahin si ${name} sa listahan?`)) {
+            remove(ref(db, `attendance_list/${id}`));
+            push(logsRef, { action: "Admin Removed AE", name: name, time: serverTimestamp() });
+        }
+    }
 
     // --- PULL LOGS ---
     onValue(logsRef, (snapshot) => {
